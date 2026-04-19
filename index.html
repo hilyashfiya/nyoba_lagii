@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Monitoring Multi Data - WebGIS Profesional</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body { margin:0; font-family: 'Segoe UI', sans-serif; }
+        #map { height: 100vh; }
+
+        .panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            z-index: 1000;
+            width: 250px;
+        }
+
+        .panel h3 {
+            margin-top: 0;
+        }
+
+        .statistik {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 300px;
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+
+        select, button {
+            width: 100%;
+            margin-top: 5px;
+            padding: 8px;
+            border-radius: 6px;
+        }
+
+        .title {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: white;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: bold;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+
+<div class="title">Monitoring Multi Data (4 Layer)</div>
+
+<div class="panel">
+    <h3>Filter Layer</h3>
+    <label><input type="checkbox" checked id="pjl"> PJL</label><br>
+    <label><input type="checkbox" checked id="persemaian"> Persemaian</label><br>
+    <label><input type="checkbox" checked id="pegawai"> Pegawai</label><br>
+    <label><input type="checkbox" checked id="jumat"> Jumat</label><br>
+</div>
+
+<div class="statistik">
+    <h3>Statistik</h3>
+    <p id="jumlah">Jumlah Titik: 0</p>
+    <canvas id="chart"></canvas>
+</div>
+
+<div id="map"></div>
+
+<script>
+var map = L.map('map').setView([-6.9, 107.6], 8);
+
+// Basemap ESRI
+L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Esri'
+}).addTo(map);
+
+// === STYLE PER DATA ===
+function getColor(type){
+    return {
+        "PJL": "blue",
+        "Persemaian": "green",
+        "Pegawai": "orange",
+        "Jumat": "red"
+    }[type];
+}
+
+// === LOAD DATA ===
+let layers = {};
+let counts = {
+    "PJL":0,
+    "Persemaian":0,
+    "Pegawai":0,
+    "Jumat":0
+};
+
+function loadLayer(name, url){
+    fetch(url)
+    .then(res => res.json())
+    .then(data => {
+
+        layers[name] = L.geoJSON(data, {
+            pointToLayer: function(feature, latlng){
+                return L.circleMarker(latlng, {
+                    radius: 6,
+                    fillColor: getColor(name),
+                    color: "#000",
+                    weight: 1,
+                    fillOpacity: 0.8
+                });
+            },
+            onEachFeature: function(feature, layer){
+                counts[name]++;
+                layer.bindPopup(`<b>${name}</b><br>` + (feature.properties.nama || ""));
+            }
+        }).addTo(map);
+
+        updateStats();
+    });
+}
+
+// LOAD SEMUA
+loadLayer("PJL", "data/pjl.geojson");
+loadLayer("Persemaian", "data/persemaian.geojson");
+loadLayer("Pegawai", "data/pegawai.geojson");
+loadLayer("Jumat", "data/jumat.geojson");
+
+// === FILTER TOGGLE ===
+document.querySelectorAll("input[type=checkbox]").forEach(el => {
+    el.addEventListener("change", function(){
+        let name = this.id.charAt(0).toUpperCase() + this.id.slice(1);
+
+        if(this.checked){
+            map.addLayer(layers[name]);
+        } else {
+            map.removeLayer(layers[name]);
+        }
+        updateStats();
+    });
+});
+
+// === CHART ===
+let chart;
+
+function updateStats(){
+    let total = 0;
+    let activeCounts = {};
+
+    Object.keys(counts).forEach(k => {
+        let checkbox = document.getElementById(k.toLowerCase());
+        if(checkbox.checked){
+            activeCounts[k] = counts[k];
+            total += counts[k];
+        }
+    });
+
+    document.getElementById("jumlah").innerText = "Jumlah Titik: " + total;
+
+    let labels = Object.keys(activeCounts);
+    let data = Object.values(activeCounts);
+
+    if(chart) chart.destroy();
+
+    chart = new Chart(document.getElementById("chart"), {
+        type: 'doughnut',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: labels.map(l => getColor(l))
+            }]
+        }
+    });
+}
+</script>
+
+</body>
+</html>
